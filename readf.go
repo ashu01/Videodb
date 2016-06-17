@@ -80,5 +80,4 @@
 // 	// be scheduled immediately after `Open`ing with
 // 	// `defer`).
 // 	f.Close()
-
 // }
