@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"os"
 	// "bufio"
+	// "bytes"
+	"io"
+	// "strings"
+	// "encoding/json"
+	"github.com/gorilla/websocket"
 	"log"
-	// "io"
-	// "time"
+	"net/http"
 )
 
 // Reading files requires checking most calls for errors.
@@ -17,22 +21,65 @@ func check(e error) {
 	}
 }
 
-func main() {
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
+}
 
-	file, err := os.Open("./Video/cat.mp4")
-	check(err)
 
-	data := make([]byte, 100)
-	count, err1 := file.Read(data)
-	if err1 != nil {
-		log.Fatal(err1)
+func writeoperation(buffer []byte, conn *websocket.Conn){
+	conn.WriteMessage(2, buffer)	
+}
+
+
+func readoperation(conn *websocket.Conn){
+	fs, err := os.Open("bike.mp4")
+	if err != nil {
+		log.Fatal(err)
 	}
-	// var z int64
-	// z = int64(count)
-	// o2, err := file.Seek(z, 1)
-	fmt.Println(count)
-	fmt.Printf("\n\n\n\n\n\n")
-	fmt.Printf("read %d bytes: %q\n", count, data[:count])
+	defer fs.Close()
+	buffer := make([]byte, 1024)
+	for {
+		buffer = buffer[:cap(buffer)]
+		n,err := fs.Read(buffer)  //read data's bytes and error if exists
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatalln(err)
+			return
+		}
+		if n == 0 {
+			break
+		}
+		buffer = buffer[:n]
+		go writeoperation(buffer,conn)	
+	}
+}
 
-	// tobestreamed := make([]byte, 100)
+
+
+func main() {
+	
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "indexserver.html")
+	})
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			var conn, errors = upgrader.Upgrade(w, r, nil)
+			if errors != nil {
+				fmt.Println(errors)
+			}
+			
+
+			go func(conn *websocket.Conn){	
+
+				go readoperation(conn) 				
+				// go writeoperation(conn)
+
+		}(conn)		
+	})
+
+	fmt.Println("Live on :3000")
+	http.ListenAndServe(":3000", nil)	
 }
