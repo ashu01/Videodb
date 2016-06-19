@@ -1,10 +1,10 @@
 package main
 
 import (
+	// "bufio"
 	"fmt"
 	"os"
-	// "bufio"
-	// "bytes"
+	"bytes"
 	"io"
 	// "strings"
 	// "encoding/json"
@@ -15,8 +15,8 @@ import (
 
 // Reading files requires checking most calls for errors.
 // This helper will streamline our error checks below.
-func check(e error) {
-	if e != nil {
+func check(e error) {																																																										
+	if e != nil {																																																												
 		panic(e)
 	}
 }
@@ -27,59 +27,79 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-
-func writeoperation(buffer []byte, conn *websocket.Conn){
-	conn.WriteMessage(2, buffer)	
-}
-
-
-func readoperation(conn *websocket.Conn){
-	fs, err := os.Open("bike.mp4")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer fs.Close()
-	buffer := make([]byte, 1024)
-	for {
-		buffer = buffer[:cap(buffer)]
-		n,err := fs.Read(buffer)  //read data's bytes and error if exists
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Fatalln(err)
-			return
-		}
-		if n == 0 {
-			break
-		}
-		buffer = buffer[:n]
-		go writeoperation(buffer,conn)	
-	}
-}
-
-
-
 func main() {
-	
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "indexserver.html")
 	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-			var conn, errors = upgrader.Upgrade(w, r, nil)
-			if errors != nil {
-				fmt.Println(errors)
+		var conn, errors = upgrader.Upgrade(w, r, nil)
+		if errors != nil {
+			fmt.Println(errors)
+		}
+
+		go func(conn *websocket.Conn) {
+
+			fs, err := os.Open("bike.mp4")
+			if err != nil {
+				log.Fatalln(err)
 			}
-			
+			defer fs.Close()
 
-			go func(conn *websocket.Conn){	
+			var buf bytes.Buffer
 
-				go readoperation(conn) 				
-				// go writeoperation(conn)
+			data := make([]byte, 1024)
 
-		}(conn)		
+			flag := false
+
+			go func() { // Read from video file in buffer
+				for {
+					n, err := bufio.NewReader(fs).Read(data)
+					n,err = buf.Write(data)
+					// conn.WriteMessage(2, data)
+					if err == io.EOF {
+						flag = true
+						break
+					} else if err != nil {
+						log.Fatalln(err)
+						return
+					}
+					if n == 0 {
+						break
+					}
+				}
+			}()
+			go func() {
+				for {
+					readdata := make([]byte, 1024)
+					n1, err1 := buf.Read(readdata)
+					conn.WriteMessage(2, readdata)
+
+					if err1 == io.EOF && flag {
+						fmt.Println("Err1 EOF : ",err1)
+
+						break
+					} else if err1 != nil && flag {
+						fmt.Println("Err1 err1 != nil : ",err1)
+						log.Fatalln(err1)
+						return
+					}
+					if n1 == 0 && flag {
+						fmt.Println("Err1 : all done  ",err1)
+						break
+					}
+				}
+			}()
+			// for {
+			// 	 n1,err1 := bufio.NewWriter(conn).Write(data)
+			// }
+
+		}(conn)
 	})
 
 	fmt.Println("Live on :3000")
-	http.ListenAndServe(":3000", nil)	
+	http.ListenAndServe(":3000", nil)
 }
+
+//gofmt -w readvideofiles.go
